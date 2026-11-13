@@ -26,6 +26,15 @@ Windows で `StreamEnded.exe` を実行すると、配信先ごとの状態と�
 
 **Actions → Release build → Run workflow** で実行します。成功した実行の **Artifacts** から `StreamEnded-win-x64` をダウンロードすると、`StreamEnded.exe` が入っています。
 
+GitHub Releases に配布する場合は、リリースしたいコミットにバージョンタグを付けて push します。
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+CI が成功すると、[Releases](https://github.com/kyoh86/stream-ended/releases) の該当バージョンの **Assets** に `StreamEnded.exe` が表示されます。ダウンロードには非公開リポジトリへのアクセス権が必要です。
+
 ビルドに組み込んだ OAuth クライアント情報は実行ファイルから取り出せます。YouTube はデスクトップアプリ用、Twitch は Public クライアント用の値を使います。
 
 ## ビルド

@@ -59,3 +59,19 @@ Google Cloud で YouTube Data API v3 を有効にし、OAuth クライアント�
 ### Twitch ログイン対応版を作る（配布者向け）
 
 Twitch Developer Console でクライアントの種類を **Public** にしてアプリを登録します。publish コマンドに `-p:StreamEndedTwitchClientId=発行されたClientID` を追加します。配信者はメイン画面の Twitch 欄にある **ログイン** を押し、ブラウザーで認可します。連携にはデバイス認証を使用し、期限切れなどで認可を更新できなくなった場合は再ログインが必要です。
+
+## Microsoft Store 版
+
+Partner Center でアプリ名を予約し、**製品 ID** から次の値をリポジトリの **Settings → Secrets and variables → Actions → Variables** に登録します。同名の Repository secrets も使えます。
+
+| Actions Variable | Partner Center の値 |
+| --- | --- |
+| `STORE_IDENTITY_NAME` | Package/Identity/Name |
+| `STORE_PUBLISHER` | Package/Identity/Publisher（`CN=` を含む値） |
+| `STORE_PUBLISHER_DISPLAY_NAME` | Package/Properties/PublisherDisplayName |
+
+**Actions → Release build → Run workflow** で `store_version` に `1.0.0.0` のような4桁バージョンを入力します。既存のYouTube・Twitch用Secretsも使用します。成果物 **StreamEnded-Store-x64** 内の `StreamEnded-Store-x64.msix` を Partner Center の申請にアップロードします。MSIX は審査後に Microsoft Store が署名します。
+
+申請では、`runFullTrust` の用途として Windows Forms の画面、通知領域の常駐とローカル設定保存を説明します。プライバシーポリシーのURLは https://kyoh86.dev/stream-ended/privacy/ です。審査で連携を試すには、Google OAuth を審査担当者が利用できる状態にしてください。
+
+Store 版では自動起動を初期状態で無効にしています。アプリを一度開いたあと、Windows の **設定 → アプリ → スタートアップ** で有効にできます。自動起動時はメイン画面が開きます。

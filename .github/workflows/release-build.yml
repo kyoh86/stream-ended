@@ -2,6 +2,10 @@ name: Release build
 
 on:
   workflow_dispatch:
+    inputs:
+      store_version:
+        description: 'Store package version (e.g. 1.0.0.0); leave blank for the GitHub installer'
+        type: string
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
@@ -55,6 +59,7 @@ jobs:
           }
 
       - name: Build installer
+        if: inputs.store_version == ''
         shell: pwsh
         run: |
           winget install --id JRSoftware.InnoSetup --exact --source winget --silent --accept-package-agreements --accept-source-agreements
@@ -67,7 +72,27 @@ jobs:
           & $compiler "/DAppVersion=$version" installer/StreamEnded.iss
           if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
 
+      - name: Build Store package
+        if: inputs.store_version != ''
+        shell: pwsh
+        env:
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME || secrets.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER || secrets.STORE_PUBLISHER }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME || secrets.STORE_PUBLISHER_DISPLAY_NAME }}
+          STORE_VERSION: ${{ inputs.store_version }}
+        run: |
+          ./installer/store/Pack.ps1 -IdentityName $env:STORE_IDENTITY_NAME -Publisher $env:STORE_PUBLISHER `
+            -PublisherDisplayName $env:STORE_PUBLISHER_DISPLAY_NAME -Version $env:STORE_VERSION
+
       - uses: actions/upload-artifact@v4
+        if: inputs.store_version != ''
+        with:
+          name: StreamEnded-Store-x64
+          path: publish/StreamEnded-Store-x64.msix
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.store_version == ''
         with:
           name: StreamEnded-win-x64
           path: |

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap desktop rescap">
+  <Identity Name="StreamEnded" Publisher="CN=StreamEnded" Version="0.0.0.0" ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>Stream Ended</DisplayName>
+    <PublisherDisplayName>Stream Ended</PublisherDisplayName>
+    <Logo>Assets\Logo50.png</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Resources>
+    <Resource Language="ja-JP" />
+  </Resources>
+  <Applications>
+    <Application Id="StreamEnded" Executable="StreamEnded.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Stream Ended"
+                          Description="YouTube・Twitchの配信終了を通知するWindowsアプリ"
+                          BackgroundColor="transparent"
+                          Square150x150Logo="Assets\Logo150.png"
+                          Square44x44Logo="Assets\Logo44.png" />
+      <Extensions>
+        <desktop:Extension Category="windows.startupTask" Executable="StreamEnded.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="StreamEndedStartup" Enabled="false" DisplayName="Stream Ended" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

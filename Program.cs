@@ -111,6 +111,7 @@ sealed class Watch(string name, Func<Providers, CancellationToken, Task<Observat
 sealed class TrayApp : ApplicationContext
 {
     private readonly Icon appIcon = new(typeof(TrayApp).Assembly.GetManifestResourceStream("StreamEnded.Icon.ico")!);
+    private readonly Icon liveIcon = new(typeof(TrayApp).Assembly.GetManifestResourceStream("StreamEnded.LiveIcon.ico")!);
     private readonly NotifyIcon tray = new() { Text = "Stream Ended" };
     private readonly ContextMenuStrip menu = new();
     private readonly StatusWindow window = new();
@@ -260,9 +261,12 @@ sealed class TrayApp : ApplicationContext
         window.Twitch.Render(twitch, Providers.TwitchClientId is not null, editing, twitchLogin is not null);
         window.Check.Enabled = !checking && (youtube is not null || twitch is not null);
         window.Check.Text = checking ? "確認中…" : "今すぐ確認";
-        window.Intro.Text = youtube is not null || twitch is not null
-            ? "登録した配信先を約30秒ごとに確認し、配信が終わったら通知します。"
-            : Providers.HasYouTubeClient || Providers.TwitchClientId is not null
+        var live = new[] { youtube, twitch }.OfType<Watch>().Where(watch => watch.Live == true)
+            .Select(watch => watch.Name).ToArray();
+        tray.Icon = live.Length > 0 ? liveIcon : appIcon;
+        tray.Text = live.Length > 0 ? $"配信中：{string.Join("・", live)}" : "Stream Ended";
+        window.Intro.Visible = youtube is null && twitch is null;
+        window.Intro.Text = Providers.HasYouTubeClient || Providers.TwitchClientId is not null
                 ? "配信に使うサービスでログインすると、配信終了を Windows に通知します。"
                 : "監視を始めるには、ログインに対応したビルドを使用してください。";
         window.Deadline.Text = deadline is { } scheduled ? scheduled.ToString("g") : "未設定";
@@ -401,6 +405,7 @@ sealed class TrayApp : ApplicationContext
             menu.Dispose();
             window.Dispose();
             appIcon.Dispose();
+            liveIcon.Dispose();
             lifetime.Dispose();
         }
         base.Dispose(disposing);

@@ -16,6 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="assets/stream-ended.ico" LogicalName="StreamEnded.Icon.ico" />
+    <EmbeddedResource Include="assets/stream-live.ico" LogicalName="StreamEnded.LiveIcon.ico" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
   </ItemGroup>
 </Project>

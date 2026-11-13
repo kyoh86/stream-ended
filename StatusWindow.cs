@@ -29,12 +29,9 @@ sealed class StatusWindow : Form
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 500));
         Intro.MaximumSize = new Size(500, 0);
-        var title = TextLine("Stream Ended");
-        title.Font = new Font(Font.FontFamily, 20, FontStyle.Bold);
-        layout.Controls.Add(title);
-        layout.Controls.Add(Intro);
         layout.Controls.Add(YouTube);
         layout.Controls.Add(Twitch);
+        layout.Controls.Add(Intro);
         layout.Controls.Add(TextLine("終了予定時刻（任意）"));
         layout.Controls.Add(TextLine("設定した時刻を過ぎても配信中なら通知します。"));
         layout.Controls.Add(Actions(Deadline, SetDeadline, ClearDeadline));
@@ -72,6 +69,7 @@ sealed class StatusWindow : Form
 sealed class ServicePanel : GroupBox
 {
     private readonly Label status = StatusWindow.TextLine();
+    private readonly Font statusFont;
     private readonly Label detail = StatusWindow.TextLine();
     public Button Connect { get; } = StatusWindow.ActionButton("ログイン…");
     public Button Disconnect { get; } = StatusWindow.ActionButton("連携を解除");
@@ -85,7 +83,9 @@ sealed class ServicePanel : GroupBox
         Dock = DockStyle.Top;
         Margin = new Padding(0, 8, 0, 8);
         Padding = new Padding(12, 6, 12, 8);
-        status.Font = new Font(Font, FontStyle.Bold);
+        statusFont = new Font(Font.FontFamily, 16, FontStyle.Bold);
+        status.Font = statusFont;
+        status.Padding = new Padding(10, 4, 10, 4);
         detail.MaximumSize = new Size(435, 0);
         var layout = new FlowLayoutPanel
         {
@@ -97,7 +97,10 @@ sealed class ServicePanel : GroupBox
 
     public void Render(Watch? watch, bool configured, bool editing, bool signingIn)
     {
-        status.Text = signingIn ? "ログイン待ち" : watch?.Status ?? "未連携";
+        var live = !signingIn && watch?.Live == true;
+        status.Text = live ? "● 配信中" : signingIn ? "ログイン待ち" : watch?.Status ?? "未連携";
+        status.ForeColor = live ? Color.White : SystemColors.ControlText;
+        status.BackColor = live ? Color.FromArgb(178, 24, 43) : Color.Transparent;
         var description = signingIn ? "ブラウザーでログインと認可を完了してください。"
             : watch?.Detail ?? "ログインすると、この配信先の監視が始まります。";
         detail.Text = configured ? description
@@ -108,5 +111,12 @@ sealed class ServicePanel : GroupBox
         Disconnect.Visible = watch is not null;
         Disconnect.Enabled = !editing;
         Cancel.Visible = signingIn;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+            statusFont.Dispose();
     }
 }

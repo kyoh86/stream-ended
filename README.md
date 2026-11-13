@@ -17,6 +17,17 @@ Windows で `StreamEnded.exe` を実行すると、配信先ごとの状態と�
 
 **今回の終了予定時刻**を設定した場合は、指定時刻を過ぎても配信中の配信先を一度ずつ通知します。全配信先の終了を確認するかアプリを終了すると、予定時刻は解除されます。
 
+## GitHub Actions でリリースビルド
+
+リポジトリの **Settings → Secrets and variables → Actions** で、次の Repository secrets を登録します。
+
+- `YOUTUBE_OAUTH_JSON` — Google の「デスクトップ アプリ」用 OAuth クライアント JSON の全文
+- `TWITCH_CLIENT_ID` — Twitch の **Public** クライアントの Client ID
+
+**Actions → Release build → Run workflow** で実行します。成功した実行の **Artifacts** から `StreamEnded-win-x64` をダウンロードすると、`StreamEnded.exe` が入っています。
+
+ビルドに組み込んだ OAuth クライアント情報は実行ファイルから取り出せます。YouTube はデスクトップアプリ用、Twitch は Public クライアント用の値を使います。
+
 ## ビルド
 
 .NET 10 SDK でビルドします。次のコマンドで Windows x64 用の実行ファイルを `publish` に出力できます。

@@ -4,12 +4,16 @@ YouTube や Twitch で自分の配信が終了したら、Windows の通知領�
 
 ## 起動
 
+[Releases](https://github.com/kyoh86/stream-ended/releases) の **Assets** から `StreamEnded-Setup-x64.exe` をダウンロードして実行します。インストール先は現在のWindowsユーザー用で、管理者権限は不要です。サインイン時の自動起動は初期設定で有効です。インストール時のチェックボックス、またはインストール後に Windows の **設定 → アプリ → スタートアップ** で切り替えられます。
+
+インストール後はスタートメニューの **Stream Ended** からも画面を開けます。更新するときは通知領域から **アプリを終了** して、新しいインストーラーを実行します。
+
 Windows で `StreamEnded.exe` を実行すると、配信先ごとの状態とログインボタンが表示されます。ウィンドウを閉じても監視は続きます。通知領域のアイコンをクリックすると画面を開き直せます。監視を止めるにはアイコンを右クリックして **アプリを終了** を選びます。
 
 - **YouTube でログイン** — ブラウザーで配信チャンネルを選んで認可します。YouTube ログイン対応のビルドを使ってください。
 - **Twitch でログイン** — ブラウザーで Twitch にログインして認可します。Twitch ログイン対応のビルドを使ってください。
 
-認証情報は Windows の現在のユーザーで暗号化して保存します。配信 URL の入力や OBS の設定は不要です。Windows ログイン時にも起動したい場合は、実行ファイルのショートカットを `shell:startup` に置きます。
+認証情報は Windows の現在のユーザーで暗号化して保存します。配信 URL の入力や OBS の設定は不要です。
 
 ## 通知
 
@@ -24,7 +28,7 @@ Windows で `StreamEnded.exe` を実行すると、配信先ごとの状態と�
 - `YOUTUBE_OAUTH_JSON` — Google の「デスクトップ アプリ」用 OAuth クライアント JSON の全文
 - `TWITCH_CLIENT_ID` — Twitch の **Public** クライアントの Client ID
 
-**Actions → Release build → Run workflow** で実行します。成功した実行の **Artifacts** から `StreamEnded-win-x64` をダウンロードすると、`StreamEnded.exe` が入っています。
+**Actions → Release build → Run workflow** で実行します。成功した実行の **Artifacts** から `StreamEnded-win-x64` をダウンロードすると、インストーラーと単体の `StreamEnded.exe` が入っています。
 
 GitHub Releases に配布する場合は、リリースしたいコミットにバージョンタグを付けて push します。
 
@@ -33,7 +37,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-CI が成功すると、[Releases](https://github.com/kyoh86/stream-ended/releases) の該当バージョンの **Assets** に `StreamEnded.exe` が表示されます。ダウンロードには非公開リポジトリへのアクセス権が必要です。
+CI が成功すると、[Releases](https://github.com/kyoh86/stream-ended/releases) の該当バージョンの **Assets** にインストーラーと単体の `StreamEnded.exe` が表示されます。ダウンロードには非公開リポジトリへのアクセス権が必要です。
 
 ビルドに組み込んだ OAuth クライアント情報は実行ファイルから取り出せます。YouTube はデスクトップアプリ用、Twitch は Public クライアント用の値を使います。
 

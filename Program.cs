@@ -6,17 +6,33 @@ namespace StreamEnded;
 static class Program
 {
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
+        var background = args.Contains("--background", StringComparer.OrdinalIgnoreCase);
+        using var showRequest = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\StreamEnded.Show");
         using var singleInstance = new Mutex(true, @"Local\StreamEnded", out var first);
         if (!first)
+        {
+            if (!background)
+                showRequest.Set();
             return;
+        }
 
         ApplicationConfiguration.Initialize();
         try
         {
-            using var app = new TrayApp();
-            Application.Run(app);
+            using var app = new TrayApp(background);
+            var context = SynchronizationContext.Current!;
+            var registration = ThreadPool.RegisterWaitForSingleObject(showRequest,
+                (_, _) => context.Post(_ => app.ShowWindow(), null), null, Timeout.Infinite, false);
+            try
+            {
+                Application.Run(app);
+            }
+            finally
+            {
+                registration.Unregister(null);
+            }
         }
         catch (Exception error)
         {
@@ -110,7 +126,7 @@ sealed class TrayApp : ApplicationContext
     private CancellationTokenSource? youtubeLogin;
     private bool observedDuringSchedule;
 
-    public TrayApp()
+    public TrayApp(bool background)
     {
         // Capture the WinForms synchronization context for async polling and menu callbacks.
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
@@ -144,7 +160,8 @@ sealed class TrayApp : ApplicationContext
         tray.BalloonTipClicked += (_, _) => ShowWindow();
         tray.Visible = true;
         RefreshWindow();
-        ShowWindow();
+        if (!background || (youtube is null && twitch is null))
+            ShowWindow();
         timer.Tick += async (_, _) => await CheckAsync();
         timer.Start();
         _ = CheckAsync();
@@ -224,8 +241,10 @@ sealed class TrayApp : ApplicationContext
     private void Notify(string title, string text) =>
         tray.ShowBalloonTip(8000, title, text, ToolTipIcon.Info);
 
-    private void ShowWindow()
+    public void ShowWindow()
     {
+        if (lifetime.IsCancellationRequested)
+            return;
         window.Show();
         if (window.WindowState == FormWindowState.Minimized)
             window.WindowState = FormWindowState.Normal;

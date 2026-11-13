@@ -54,10 +54,25 @@ jobs:
             Remove-Item -LiteralPath $env:StreamEndedYouTubeOAuthFile -ErrorAction SilentlyContinue
           }
 
+      - name: Build installer
+        shell: pwsh
+        run: |
+          winget install --id JRSoftware.InnoSetup --exact --source winget --silent --accept-package-agreements --accept-source-agreements
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed." }
+          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path -LiteralPath $compiler)) {
+            $compiler = Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'
+          }
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.Substring(1) } else { '0.0.0' }
+          & $compiler "/DAppVersion=$version" installer/StreamEnded.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
+
       - uses: actions/upload-artifact@v4
         with:
           name: StreamEnded-win-x64
-          path: publish/StreamEnded.exe
+          path: |
+            publish/StreamEnded.exe
+            publish/StreamEnded-Setup-x64.exe
           if-no-files-found: error
 
   publish-release:
@@ -76,9 +91,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > release-assets.txt; then
-            if ! grep -Fxq StreamEnded.exe release-assets.txt; then
-              gh release upload "$GITHUB_REF_NAME" StreamEnded.exe --repo "$GITHUB_REPOSITORY"
-            fi
+            for asset in StreamEnded.exe StreamEnded-Setup-x64.exe; do
+              if ! grep -Fxq "$asset" release-assets.txt; then
+                gh release upload "$GITHUB_REF_NAME" "$asset" --repo "$GITHUB_REPOSITORY"
+              fi
+            done
           else
-            gh release create "$GITHUB_REF_NAME" StreamEnded.exe --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+            gh release create "$GITHUB_REF_NAME" StreamEnded.exe StreamEnded-Setup-x64.exe --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
           fi

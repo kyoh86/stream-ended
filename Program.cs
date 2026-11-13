@@ -108,6 +108,13 @@ sealed class TrayApp : ApplicationContext
     private DateTimeOffset? deadline;
     private bool checking;
     private bool editing;
+    private CancellationTokenSource? twitchLogin;
+    private readonly ToolStripMenuItem cancelTwitchLogin = new("Twitch ログインをキャンセル") { Visible = false };
+    private CancellationTokenSource? youtubeLogin;
+    private readonly ToolStripMenuItem cancelYouTubeLogin = new("YouTube ログインをキャンセル")
+    {
+        Visible = false
+    };
     private bool observedDuringSchedule;
 
     public TrayApp()
@@ -118,8 +125,22 @@ sealed class TrayApp : ApplicationContext
         twitch = CreateTwitch(settings.Twitch);
         menu.Items.AddRange([youtubeStatus, twitchStatus, deadlineStatus, new ToolStripSeparator()]);
         menu.Items.Add("今すぐ確認", null, async (_, _) => await CheckAsync());
-        menu.Items.Add("YouTube を連携…", null, async (_, _) => await ConnectYouTubeAsync());
-        menu.Items.Add("Twitch を登録…", null, async (_, _) => await ConnectTwitchAsync());
+        var connectYouTube = menu.Items.Add("YouTube でログイン…", null, async (_, _) => await ConnectYouTubeAsync());
+        if (!Providers.HasYouTubeClient)
+        {
+            connectYouTube.Text = "YouTube ログイン未設定のビルド";
+            connectYouTube.Enabled = false;
+        }
+        cancelYouTubeLogin.Click += (_, _) => youtubeLogin?.Cancel();
+        menu.Items.Add(cancelYouTubeLogin);
+        var connectTwitch = menu.Items.Add("Twitch でログイン…", null, async (_, _) => await ConnectTwitchAsync());
+        if (Providers.TwitchClientId is null)
+        {
+            connectTwitch.Text = "Twitch ログイン未設定のビルド";
+            connectTwitch.Enabled = false;
+        }
+        cancelTwitchLogin.Click += (_, _) => twitchLogin?.Cancel();
+        menu.Items.Add(cancelTwitchLogin);
         menu.Items.Add("YouTube の連携を解除", null, (_, _) => Update(settings with { YouTube = null }));
         menu.Items.Add("Twitch の登録を解除", null, (_, _) => Update(settings with { Twitch = null }));
         menu.Items.Add("今回の終了予定時刻…", null, async (_, _) => await SetDeadlineAsync());
@@ -138,8 +159,23 @@ sealed class TrayApp : ApplicationContext
     private static Watch? CreateYouTube(YouTubeAccount? account) => account is null ? null :
         new("YouTube", (provider, cancellation) => provider.YouTubeAsync(account, cancellation));
 
-    private static Watch? CreateTwitch(TwitchAccount? account) => account is null ? null :
-        new("Twitch", (provider, cancellation) => provider.TwitchAsync(account, cancellation));
+    private Watch? CreateTwitch(TwitchAccount? account)
+    {
+        if (account is null)
+            return null;
+
+        Watch? watch = null;
+        watch = new("Twitch", (provider, cancellation) =>
+            provider.TwitchAsync(account, cancellation, refresh =>
+            {
+                if (twitch != watch)
+                    return;
+                var updated = settings with { Twitch = account with { RefreshToken = refresh } };
+                SettingsFile.Save(updated);
+                settings = updated;
+            }));
+        return watch;
+    }
 
     private async Task CheckAsync()
     {
@@ -231,29 +267,31 @@ sealed class TrayApp : ApplicationContext
         if (editing)
             return;
         editing = true;
+        using var login = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        youtubeLogin = login;
+        cancelYouTubeLogin.Visible = true;
         try
         {
-            using var file = new OpenFileDialog
-            {
-                Title = "Google のデスクトップ OAuth クライアント JSON を選択",
-                Filter = "OAuth JSON (*.json)|*.json"
-            };
-            if (file.ShowDialog() == DialogResult.OK)
-            {
-                var account = await Providers.ConnectYouTubeAsync(file.FileName, lifetime.Token);
-                if (!lifetime.IsCancellationRequested)
-                    Update(settings with { YouTube = account });
-            }
+            var account = await Providers.ConnectYouTubeAsync(login.Token);
+            if (!login.IsCancellationRequested)
+                Update(settings with { YouTube = account });
         }
-        catch (Exception failure) when (!lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (login.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            MessageBox.Show("ログインの待機時間が過ぎました。もう一度お試しください。",
+                "YouTubeを連携できませんでした");
+        }
+        catch (Exception failure) when (!login.IsCancellationRequested)
         {
             MessageBox.Show(failure.Message, "YouTubeを連携できませんでした");
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
-        {
-        }
         finally
         {
+            youtubeLogin = null;
+            cancelYouTubeLogin.Visible = false;
             editing = false;
         }
     }
@@ -262,45 +300,28 @@ sealed class TrayApp : ApplicationContext
     {
         if (editing)
             return;
-        using var form = new Form { Text = "Twitch 登録", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            StartPosition = FormStartPosition.CenterScreen, FormBorderStyle = FormBorderStyle.FixedDialog };
-        var panel = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Padding = new Padding(12) };
-        var login = new TextBox { Width = 300, Text = settings.Twitch?.Login ?? "" };
-        var id = new TextBox { Width = 300, Text = settings.Twitch?.ClientId ?? "" };
-        var secret = new TextBox { Width = 300, Text = settings.Twitch?.ClientSecret ?? "", UseSystemPasswordChar = true };
-        foreach (var field in new[] { ("チャンネル名", login), ("Client ID", id), ("Client Secret", secret) })
-        {
-            panel.Controls.Add(new Label { Text = field.Item1, AutoSize = true });
-            panel.Controls.Add(field.Item2);
-        }
-        var save = new Button { Text = "登録", DialogResult = DialogResult.OK };
-        panel.Controls.Add(save);
-        form.Controls.Add(panel);
-        form.AcceptButton = save;
-        if (form.ShowDialog() != DialogResult.OK)
-            return;
-        var account = new TwitchAccount(login.Text.Trim(), id.Text.Trim(), secret.Text.Trim());
-        if (account.Login.Length == 0 || account.ClientId.Length == 0 || account.ClientSecret.Length == 0)
-        {
-            MessageBox.Show("すべての項目を入力してください。", "Twitch 登録");
-            return;
-        }
         editing = true;
+        using var login = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        twitchLogin = login;
+        cancelTwitchLogin.Visible = true;
         try
         {
-            await new Providers().TwitchAsync(account, lifetime.Token);
-            if (!lifetime.IsCancellationRequested)
+            var account = await Providers.ConnectTwitchAsync(login.Token);
+            if (!login.IsCancellationRequested)
                 Update(settings with { Twitch = account });
         }
-        catch (Exception failure) when (!lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (login.IsCancellationRequested)
         {
-            MessageBox.Show(failure.Message, "Twitchを登録できませんでした");
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (Exception failure)
         {
+            if (!login.IsCancellationRequested)
+                MessageBox.Show(failure.Message, "Twitchを連携できませんでした");
         }
         finally
         {
+            twitchLogin = null;
+            cancelTwitchLogin.Visible = false;
             editing = false;
         }
     }

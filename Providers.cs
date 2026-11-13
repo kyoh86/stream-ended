@@ -9,12 +9,12 @@ using System.Text.Json;
 namespace StreamEnded;
 
 record YouTubeAccount(string ClientId, string ClientSecret, string RefreshToken);
-record TwitchAccount(string Login, string ClientId, string ClientSecret);
+record TwitchAccount(string Login, string ClientId, string? ClientSecret, string? RefreshToken = null);
 record Settings(YouTubeAccount? YouTube = null, TwitchAccount? Twitch = null);
 
 record Observation(bool Live, bool Ended = false);
 
-sealed class Providers
+sealed partial class Providers
 {
     private const string GoogleToken = "https://oauth2.googleapis.com/token";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -67,14 +67,16 @@ sealed class Providers
         return new(live.Count > 0, ended.Count > 0 && broadcasts.Count == 0);
     }
 
-    public async Task<Observation> TwitchAsync(TwitchAccount account, CancellationToken cancellation)
+    public async Task<Observation> TwitchAsync(TwitchAccount account, CancellationToken cancellation, Action<string>? saveRefreshToken = null)
     {
-        var token = await TokenAsync("https://id.twitch.tv/oauth2/token", new()
-        {
-            ["grant_type"] = "client_credentials",
-            ["client_id"] = account.ClientId,
-            ["client_secret"] = account.ClientSecret
-        }, cancellation);
+        var token = account.RefreshToken is not null
+            ? await TwitchUserTokenAsync(account, saveRefreshToken!, cancellation)
+            : await TokenAsync(TwitchToken, new()
+            {
+                ["grant_type"] = "client_credentials",
+                ["client_id"] = account.ClientId,
+                ["client_secret"] = account.ClientSecret!
+            }, cancellation);
         if (twitchUserId is null)
         {
             var users = await GetAsync("https://api.twitch.tv/helix/users?login=" +
@@ -133,9 +135,14 @@ sealed class Providers
         return json.RootElement.Clone();
     }
 
-    public static async Task<YouTubeAccount> ConnectYouTubeAsync(string file, CancellationToken cancellation)
+    public static bool HasYouTubeClient =>
+        typeof(Providers).Assembly.GetManifestResourceInfo("StreamEnded.YouTubeOAuth.json") is not null;
+
+    public static async Task<YouTubeAccount> ConnectYouTubeAsync(CancellationToken cancellation)
     {
-        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(file, cancellation));
+        using var credentials = typeof(Providers).Assembly.GetManifestResourceStream("StreamEnded.YouTubeOAuth.json")
+            ?? throw new InvalidOperationException("YouTube連携に対応したビルドを使用してください。");
+        using var document = await JsonDocument.ParseAsync(credentials, cancellationToken: cancellation);
         var installed = document.RootElement.GetProperty("installed");
         var id = installed.GetProperty("client_id").GetString()!;
         var secret = installed.GetProperty("client_secret").GetString()!;

@@ -13,20 +13,22 @@ sealed class StatusWindow : Form
     public StatusWindow()
     {
         Text = "Stream Ended";
-        Icon = SystemIcons.Information;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(600, 510);
-        MinimumSize = new Size(520, 440);
+        ClientSize = new Size(548, 1);
+        FormBorderStyle = FormBorderStyle.FixedSingle;
+        MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
 
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            AutoScroll = true,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
             Padding = new Padding(24),
             ColumnCount = 1
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 500));
+        Intro.MaximumSize = new Size(500, 0);
         var title = TextLine("Stream Ended");
         title.Font = new Font(Font.FontFamily, 20, FontStyle.Bold);
         layout.Controls.Add(title);
@@ -39,6 +41,17 @@ sealed class StatusWindow : Form
         layout.Controls.Add(Actions(Check));
         layout.Controls.Add(TextLine("ウィンドウを閉じても、通知領域で監視を続けます。"));
         Controls.Add(layout);
+
+        // Keep the form width independent of the top-docked panel's preferred size.
+        layout.SizeChanged += (_, _) => FitHeight();
+        Shown += (_, _) => FitHeight();
+        FitHeight();
+
+        void FitHeight()
+        {
+            if (ClientSize.Height != layout.Height)
+                ClientSize = new Size(ClientSize.Width, layout.Height);
+        }
     }
 
     internal static Label TextLine(string text = "") => new()

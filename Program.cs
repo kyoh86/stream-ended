@@ -110,7 +110,8 @@ sealed class Watch(string name, Func<Providers, CancellationToken, Task<Observat
 
 sealed class TrayApp : ApplicationContext
 {
-    private readonly NotifyIcon tray = new() { Icon = SystemIcons.Information, Text = "Stream Ended" };
+    private readonly Icon appIcon = new(typeof(TrayApp).Assembly.GetManifestResourceStream("StreamEnded.Icon.ico")!);
+    private readonly NotifyIcon tray = new() { Text = "Stream Ended" };
     private readonly ContextMenuStrip menu = new();
     private readonly StatusWindow window = new();
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30_000 };
@@ -130,6 +131,8 @@ sealed class TrayApp : ApplicationContext
     {
         // Capture the WinForms synchronization context for async polling and menu callbacks.
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+        tray.Icon = appIcon;
+        window.Icon = appIcon;
         youtube = CreateYouTube(settings.YouTube);
         twitch = CreateTwitch(settings.Twitch);
         window.YouTube.Connect.Click += async (_, _) => await ConnectYouTubeAsync();
@@ -397,6 +400,7 @@ sealed class TrayApp : ApplicationContext
             tray.Dispose();
             menu.Dispose();
             window.Dispose();
+            appIcon.Dispose();
             lifetime.Dispose();
         }
         base.Dispose(disposing);

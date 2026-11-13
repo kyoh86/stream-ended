@@ -80,25 +80,23 @@ sealed class Watch(string name, Func<Providers, CancellationToken, Task<Observat
         }
     }
 
-    public string Describe()
-    {
-        if (error is not null)
-            return $"{Name}：確認できません（{error}）";
-        if (endedAt is not null)
-            return $"{Name}：終了確認済み {endedAt:HH:mm:ss}";
-        if (CheckedAt is null)
-            return $"{Name}：確認中";
-        return $"{Name}：{(Live == true ? "配信中" : "オフライン")} {CheckedAt:HH:mm:ss} 確認";
-    }
+    public string Status => error is not null ? "確認できません"
+        : endedAt is not null ? "終了確認済み"
+        : CheckedAt is null ? "確認中"
+        : Live == true ? "配信中" : "オフライン";
+
+    public string Detail => error
+        ?? (endedAt is { } ended ? $"終了を確認 {ended:g}"
+        : CheckedAt is { } checkedAt ? $"最終確認 {checkedAt:g}"
+        : "配信先に問い合わせています。");
+
 }
 
 sealed class TrayApp : ApplicationContext
 {
     private readonly NotifyIcon tray = new() { Icon = SystemIcons.Information, Text = "Stream Ended" };
     private readonly ContextMenuStrip menu = new();
-    private readonly ToolStripMenuItem youtubeStatus = new() { Enabled = false };
-    private readonly ToolStripMenuItem twitchStatus = new() { Enabled = false };
-    private readonly ToolStripMenuItem deadlineStatus = new() { Enabled = false };
+    private readonly StatusWindow window = new();
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30_000 };
     private readonly CancellationTokenSource lifetime = new();
     private readonly HashSet<Watch> overdue = new();
@@ -109,12 +107,7 @@ sealed class TrayApp : ApplicationContext
     private bool checking;
     private bool editing;
     private CancellationTokenSource? twitchLogin;
-    private readonly ToolStripMenuItem cancelTwitchLogin = new("Twitch ログインをキャンセル") { Visible = false };
     private CancellationTokenSource? youtubeLogin;
-    private readonly ToolStripMenuItem cancelYouTubeLogin = new("YouTube ログインをキャンセル")
-    {
-        Visible = false
-    };
     private bool observedDuringSchedule;
 
     public TrayApp()
@@ -123,34 +116,35 @@ sealed class TrayApp : ApplicationContext
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
         youtube = CreateYouTube(settings.YouTube);
         twitch = CreateTwitch(settings.Twitch);
-        menu.Items.AddRange([youtubeStatus, twitchStatus, deadlineStatus, new ToolStripSeparator()]);
-        menu.Items.Add("今すぐ確認", null, async (_, _) => await CheckAsync());
-        var connectYouTube = menu.Items.Add("YouTube でログイン…", null, async (_, _) => await ConnectYouTubeAsync());
-        if (!Providers.HasYouTubeClient)
+        window.YouTube.Connect.Click += async (_, _) => await ConnectYouTubeAsync();
+        window.Twitch.Connect.Click += async (_, _) => await ConnectTwitchAsync();
+        window.YouTube.Cancel.Click += (_, _) => youtubeLogin?.Cancel();
+        window.Twitch.Cancel.Click += (_, _) => twitchLogin?.Cancel();
+        window.YouTube.Disconnect.Click += (_, _) => Update(settings with { YouTube = null });
+        window.Twitch.Disconnect.Click += (_, _) => Update(settings with { Twitch = null });
+        window.Check.Click += async (_, _) => await CheckAsync();
+        window.SetDeadline.Click += async (_, _) => await SetDeadlineAsync();
+        window.ClearDeadline.Click += (_, _) => ClearDeadline();
+        window.FormClosing += (_, e) =>
         {
-            connectYouTube.Text = "YouTube ログイン未設定のビルド";
-            connectYouTube.Enabled = false;
-        }
-        cancelYouTubeLogin.Click += (_, _) => youtubeLogin?.Cancel();
-        menu.Items.Add(cancelYouTubeLogin);
-        var connectTwitch = menu.Items.Add("Twitch でログイン…", null, async (_, _) => await ConnectTwitchAsync());
-        if (Providers.TwitchClientId is null)
-        {
-            connectTwitch.Text = "Twitch ログイン未設定のビルド";
-            connectTwitch.Enabled = false;
-        }
-        cancelTwitchLogin.Click += (_, _) => twitchLogin?.Cancel();
-        menu.Items.Add(cancelTwitchLogin);
-        menu.Items.Add("YouTube の連携を解除", null, (_, _) => Update(settings with { YouTube = null }));
-        menu.Items.Add("Twitch の登録を解除", null, (_, _) => Update(settings with { Twitch = null }));
-        menu.Items.Add("今回の終了予定時刻…", null, async (_, _) => await SetDeadlineAsync());
-        menu.Items.Add("終了予定時刻を解除", null, (_, _) => ClearDeadline());
-        menu.Items.Add("終了", null, (_, _) => ExitThread());
+            if (e.CloseReason == CloseReason.UserClosing && !lifetime.IsCancellationRequested)
+            {
+                e.Cancel = true;
+                window.Hide();
+            }
+        };
+        menu.Items.Add("画面を開く", null, (_, _) => ShowWindow());
+        menu.Items.Add("アプリを終了", null, (_, _) => ExitThread());
         tray.ContextMenuStrip = menu;
-        tray.DoubleClick += (_, _) => MessageBox.Show(
-            $"{youtubeStatus.Text}\n{twitchStatus.Text}\n{deadlineStatus.Text}", "Stream Ended");
+        tray.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+                ShowWindow();
+        };
+        tray.BalloonTipClicked += (_, _) => ShowWindow();
         tray.Visible = true;
-        RefreshMenu();
+        RefreshWindow();
+        ShowWindow();
         timer.Tick += async (_, _) => await CheckAsync();
         timer.Start();
         _ = CheckAsync();
@@ -182,6 +176,7 @@ sealed class TrayApp : ApplicationContext
         if (checking || lifetime.IsCancellationRequested)
             return;
         checking = true;
+        RefreshWindow();
         try
         {
             var watches = new[] { youtube, twitch }.OfType<Watch>().ToArray();
@@ -213,7 +208,7 @@ sealed class TrayApp : ApplicationContext
             {
                 Notify("終了予定を過ぎても配信中です", string.Join("・", late));
             }
-            RefreshMenu();
+            RefreshWindow();
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {
@@ -221,18 +216,35 @@ sealed class TrayApp : ApplicationContext
         finally
         {
             checking = false;
+            if (!lifetime.IsCancellationRequested)
+                RefreshWindow();
         }
     }
 
     private void Notify(string title, string text) =>
         tray.ShowBalloonTip(8000, title, text, ToolTipIcon.Info);
 
-    private void RefreshMenu()
+    private void ShowWindow()
     {
-        youtubeStatus.Text = youtube?.Describe() ?? "YouTube：未登録";
-        twitchStatus.Text = twitch?.Describe() ?? "Twitch：未登録";
-        deadlineStatus.Text = deadline is { } scheduled
-            ? $"終了予定 {scheduled:MM/dd HH:mm}" : "終了予定なし";
+        window.Show();
+        if (window.WindowState == FormWindowState.Minimized)
+            window.WindowState = FormWindowState.Normal;
+        window.Activate();
+    }
+
+    private void RefreshWindow()
+    {
+        window.YouTube.Render(youtube, Providers.HasYouTubeClient, editing, youtubeLogin is not null);
+        window.Twitch.Render(twitch, Providers.TwitchClientId is not null, editing, twitchLogin is not null);
+        window.Check.Enabled = !checking && (youtube is not null || twitch is not null);
+        window.Check.Text = checking ? "確認中…" : "今すぐ確認";
+        window.Intro.Text = youtube is not null || twitch is not null
+            ? "登録した配信先を約30秒ごとに確認し、配信が終わったら通知します。"
+            : Providers.HasYouTubeClient || Providers.TwitchClientId is not null
+                ? "配信に使うサービスでログインすると、配信終了を Windows に通知します。"
+                : "監視を始めるには、ログインに対応したビルドを使用してください。";
+        window.Deadline.Text = deadline is { } scheduled ? scheduled.ToString("g") : "未設定";
+        window.ClearDeadline.Enabled = deadline is not null;
     }
 
     private void ClearDeadline()
@@ -240,7 +252,7 @@ sealed class TrayApp : ApplicationContext
         deadline = null;
         overdue.Clear();
         observedDuringSchedule = false;
-        RefreshMenu();
+        RefreshWindow();
     }
 
     private void Update(Settings updated)
@@ -253,7 +265,7 @@ sealed class TrayApp : ApplicationContext
             if (settings.Twitch != updated.Twitch)
                 twitch = CreateTwitch(updated.Twitch);
             settings = updated;
-            RefreshMenu();
+            RefreshWindow();
             _ = CheckAsync();
         }
         catch (Exception failure)
@@ -269,7 +281,7 @@ sealed class TrayApp : ApplicationContext
         editing = true;
         using var login = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         youtubeLogin = login;
-        cancelYouTubeLogin.Visible = true;
+        RefreshWindow();
         try
         {
             var account = await Providers.ConnectYouTubeAsync(login.Token);
@@ -291,8 +303,9 @@ sealed class TrayApp : ApplicationContext
         finally
         {
             youtubeLogin = null;
-            cancelYouTubeLogin.Visible = false;
             editing = false;
+            if (!lifetime.IsCancellationRequested)
+                RefreshWindow();
         }
     }
 
@@ -303,7 +316,7 @@ sealed class TrayApp : ApplicationContext
         editing = true;
         using var login = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         twitchLogin = login;
-        cancelTwitchLogin.Visible = true;
+        RefreshWindow();
         try
         {
             var account = await Providers.ConnectTwitchAsync(login.Token);
@@ -321,8 +334,9 @@ sealed class TrayApp : ApplicationContext
         finally
         {
             twitchLogin = null;
-            cancelTwitchLogin.Visible = false;
             editing = false;
+            if (!lifetime.IsCancellationRequested)
+                RefreshWindow();
         }
     }
 
@@ -338,13 +352,13 @@ sealed class TrayApp : ApplicationContext
         panel.Controls.AddRange([picker, save]);
         form.Controls.Add(panel);
         form.AcceptButton = save;
-        if (form.ShowDialog() != DialogResult.OK)
+        if (form.ShowDialog(window) != DialogResult.OK)
             return;
         var time = picker.Value;
         deadline = new DateTime(time.Year, time.Month, time.Day, time.Hour, time.Minute, 0, DateTimeKind.Local);
         overdue.Clear();
         observedDuringSchedule = false;
-        RefreshMenu();
+        RefreshWindow();
         await CheckAsync();
     }
 
@@ -363,6 +377,7 @@ sealed class TrayApp : ApplicationContext
             timer.Dispose();
             tray.Dispose();
             menu.Dispose();
+            window.Dispose();
             lifetime.Dispose();
         }
         base.Dispose(disposing);

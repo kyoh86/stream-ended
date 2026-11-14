@@ -11,13 +11,19 @@ YouTube や Twitch で自分の配信が終了したら、Windows に通知し�
 
 Stream Ended は映像や音声を受信せず、約30秒ごとに配信状態を取得します。数値は仮定に基づく計算例です。再生時の帯域は画質などで変わり、アプリの実際の通信量には接続や認証の通信も加わります。
 
-## 起動
+## インストールと起動
+
+[Microsoft Storeで Stream Ended を入手](https://apps.microsoft.com/detail/9N6FDZFXBWT6)できます。Store 版のサインイン時の自動起動は初期状態で無効です。アプリを一度開いたあと、Windows の **設定 → アプリ → スタートアップ** で有効にできます。
+
+### GitHub 版を使う場合
 
 [Releases](https://github.com/kyoh86/stream-ended/releases) の **Assets** から `StreamEnded-Setup-x64.exe` をダウンロードして実行します。インストール先は現在のWindowsユーザー用で、管理者権限は不要です。サインイン時の自動起動は初期設定で有効です。インストール時のチェックボックス、またはインストール後に Windows の **設定 → アプリ → スタートアップ** で切り替えられます。
 
 インストール後はスタートメニューの **Stream Ended** からも画面を開けます。更新するときは通知領域から **アプリを終了** して、新しいインストーラーを実行します。
 
-Windows で `StreamEnded.exe` を実行すると、配信先ごとの状態とログインボタンが表示されます。ウィンドウを閉じても監視は続きます。通知領域のアイコンをクリックすると画面を開き直せます。監視を止めるにはアイコンを右クリックして **アプリを終了** を選びます。
+### アプリの使い方
+
+Windows でアプリを起動すると、配信先ごとの状態とログインボタンが表示されます。ウィンドウを閉じても監視は続きます。通知領域のアイコンをクリックすると画面を開き直せます。監視を止めるにはアイコンを右クリックして **アプリを終了** を選びます。
 
 - **YouTube でログイン** — ブラウザーで配信チャンネルを選んで認可します。YouTube ログイン対応のビルドを使ってください。
 - **Twitch でログイン** — ブラウザーで Twitch にログインして認可します。Twitch ログイン対応のビルドを使ってください。
@@ -46,7 +52,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-CI が成功すると、[Releases](https://github.com/kyoh86/stream-ended/releases) の該当バージョンの **Assets** にインストーラーと単体の `StreamEnded.exe` が表示されます。ダウンロードには非公開リポジトリへのアクセス権が必要です。
+CI が成功すると、[Releases](https://github.com/kyoh86/stream-ended/releases) の該当バージョンの **Assets** にインストーラーと単体の `StreamEnded.exe` が表示されます。
 
 ビルドに組み込んだ OAuth クライアント情報は実行ファイルから取り出せます。YouTube はデスクトップアプリ用、Twitch は Public クライアント用の値を使います。
 
@@ -69,7 +75,7 @@ Google Cloud で YouTube Data API v3 を有効にし、OAuth クライアント�
 
 Twitch Developer Console でクライアントの種類を **Public** にしてアプリを登録します。publish コマンドに `-p:StreamEndedTwitchClientId=発行されたClientID` を追加します。配信者はメイン画面の Twitch 欄にある **ログイン** を押し、ブラウザーで認可します。連携にはデバイス認証を使用し、期限切れなどで認可を更新できなくなった場合は再ログインが必要です。
 
-## Microsoft Store 版
+## Microsoft Store 版の申請（配布者向け）
 
 Partner Center でアプリ名を予約し、**製品 ID** から次の値をリポジトリの **Settings → Secrets and variables → Actions → Variables** に登録します。同名の Repository secrets も使えます。
 
@@ -82,5 +88,3 @@ Partner Center でアプリ名を予約し、**製品 ID** から次の値をリ
 **Actions → Release build → Run workflow** で `store_version` に `1.0.0.0` のような4桁バージョンを入力します。既存のYouTube・Twitch用Secretsも使用します。成果物 **StreamEnded-Store-x64** 内の `StreamEnded-Store-x64.msix` を Partner Center の申請にアップロードします。MSIX は審査後に Microsoft Store が署名します。
 
 申請では、`runFullTrust` の用途として Windows Forms の画面、通知領域の常駐とローカル設定保存を説明します。プライバシーポリシーのURLは https://kyoh86.dev/stream-ended/privacy/ です。審査で連携を試すには、Google OAuth を審査担当者が利用できる状態にしてください。
-
-Store 版では自動起動を初期状態で無効にしています。アプリを一度開いたあと、Windows の **設定 → アプリ → スタートアップ** で有効にできます。自動起動時はメイン画面が開きます。
